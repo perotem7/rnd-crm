@@ -157,6 +157,11 @@ const handleCustomerUpdated = (customer) => {
   // You could add additional logic here if needed
 };
 
+// Handle product association updated event
+const handleProductAssociationUpdated = (updatedProducts) => {
+  // You could add additional logic here if needed
+};
+
 // Delete customer
 const deleteCustomer = async (id) => {
   if (confirm('Are you sure you want to delete this customer?')) {
@@ -357,7 +362,7 @@ const handleKeydown = (e) => {
       :show="showProductDialog"
       :customer="selectedCustomer"
       @close="closeProductDialog"
-      @products-updated="handleCustomerUpdated"
+      @products-updated="handleProductAssociationUpdated"
     />
   </div>
 </template>

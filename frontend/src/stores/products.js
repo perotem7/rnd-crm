@@ -228,7 +228,7 @@ export const useProductStore = defineStore('products', () => {
   };
 
   // Toggle between real and mock implementations
-  const USE_MOCK_DATA = true; // Temporarily using mock data until backend API is ready
+  const USE_MOCK_DATA = false; // Using real API data from the database
 
   // Fetch products associated with a customer
   const fetchCustomerProducts = async (customerId) => {
@@ -367,6 +367,74 @@ export const useProductStore = defineStore('products', () => {
     }
   };
 
+  // Handle product association updates - saves to database
+  const handleProductAssociationUpdated = async (customerId, associatedProducts) => {
+    loading.value = true;
+    error.value = null;
+    
+    try {
+      console.log(`Saving product associations for customer ${customerId}`);
+      
+      // If using mock data, update the mock data store
+      if (USE_MOCK_DATA) {
+        // Get all current product IDs
+        const productIds = associatedProducts.map(p => p.id);
+        
+        // Initialize if not exists
+        if (!mockCustomerProducts[customerId]) {
+          mockCustomerProducts[customerId] = [];
+        }
+        
+        // Replace the entire array with the new associated products
+        mockCustomerProducts[customerId] = [...associatedProducts];
+        
+        console.log(`Updated ${mockCustomerProducts[customerId].length} products for customer ${customerId}`);
+        
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        return mockCustomerProducts[customerId];
+      }
+      
+      // Get auth token for the real API call
+      const authStore = useAuthStore();
+      console.log('Using token:', authStore.token ? 'Token exists' : 'No token');
+      
+      // Extract product IDs
+      const productIds = associatedProducts.map(p => p.id);
+      
+      // Make API request to update associations
+      const url = `${API_URL}/customers/${customerId}/products/update`;
+      console.log('Making API request to:', url);
+      
+      const response = await axios.post(url, {
+        productIds
+      }, {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`
+        }
+      });
+      
+      console.log('Server response:', response.data);
+      return response.data;
+    } catch (err) {
+      console.error('Failed to save product associations:', err);
+      if (err.response) {
+        console.error('Error response:', err.response.status, err.response.data);
+        error.value = `Failed to save product associations: ${err.response.status} - ${JSON.stringify(err.response.data)}`;
+      } else if (err.request) {
+        console.error('No response received:', err.request);
+        error.value = 'Failed to save product associations: No response from server';
+      } else {
+        console.error('Error details:', err.message);
+        error.value = `Failed to save product associations: ${err.message}`;
+      }
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  };
+
   return {
     // State
     products,
@@ -387,6 +455,7 @@ export const useProductStore = defineStore('products', () => {
     clearSelectedProduct,
     fetchCustomerProducts,
     associateProductsWithCustomer,
-    disassociateProductsFromCustomer
+    disassociateProductsFromCustomer,
+    handleProductAssociationUpdated
   }
 }) 

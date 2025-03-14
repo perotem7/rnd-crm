@@ -136,6 +136,9 @@ const moveToAssociated = async () => {
     // Clear selections
     selectedUnassociated.value = [];
     
+    // Save to database
+    await saveAssociationsToDatabase();
+    
     // Emit event to notify parent component
     emit('products-updated', associatedProducts.value);
     
@@ -178,6 +181,9 @@ const moveToUnassociated = async () => {
     // Clear selections
     selectedAssociated.value = [];
     
+    // Save to database
+    await saveAssociationsToDatabase();
+    
     // Emit event to notify parent component
     emit('products-updated', associatedProducts.value);
     
@@ -192,6 +198,37 @@ const moveToUnassociated = async () => {
 // Close dialog
 const closeDialog = () => {
   emit('close');
+};
+
+// Save the current product associations to the database
+const saveAssociationsToDatabase = async () => {
+  if (!props.customer) return;
+  
+  loading.value = true;
+  error.value = null;
+  
+  try {
+    console.log(`Saving ${associatedProducts.value.length} product associations for customer ${props.customer.id}`);
+    
+    // Call the handleProductAssociationUpdated method to save to database
+    await productStore.handleProductAssociationUpdated(
+      props.customer.id,
+      associatedProducts.value
+    );
+    
+    console.log('Product associations saved successfully');
+  } catch (err) {
+    console.error('Failed to save product associations:', err);
+    if (err.response) {
+      error.value = `Failed to save product associations: ${err.response.status} - ${err.response.data}`;
+    } else if (err.request) {
+      error.value = 'Failed to save product associations: No response from server';
+    } else {
+      error.value = `Failed to save product associations: ${err.message}`;
+    }
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 
@@ -517,5 +554,15 @@ const closeDialog = () => {
 
 .btn.secondary:hover {
   background-color: #dde2e6;
+}
+
+.btn.primary {
+  background-color: #4361ee;
+  color: white;
+  margin-right: 10px;
+}
+
+.btn.primary:hover {
+  background-color: #3a56d4;
 }
 </style> 
