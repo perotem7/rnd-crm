@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useCustomerStore } from '../stores/customers';
 
 const customerStore = useCustomerStore();
@@ -29,6 +29,47 @@ const selectedCustomer = ref(null);
 const editingCustomer = ref(null);
 const formError = ref('');
 
+// Track expanded customer cards
+const expandedCards = ref({});
+
+// Track action menu visibility 
+const actionMenuVisible = ref({});
+
+// Toggle card expansion
+const toggleCardExpansion = (customerId) => {
+  expandedCards.value[customerId] = !expandedCards.value[customerId];
+};
+
+// Toggle action menu
+const toggleActionMenu = (event, customerId) => {
+  event.stopPropagation();
+  
+  // Get the current state
+  const isCurrentlyVisible = actionMenuVisible.value[customerId];
+  
+  // Close all other menus first
+  closeAllActionMenus();
+  
+  // Toggle this menu (only set to true if it was false before)
+  actionMenuVisible.value[customerId] = !isCurrentlyVisible;
+  
+  // If we're opening a menu, add a one-time event listener to close it when clicking elsewhere
+  if (actionMenuVisible.value[customerId]) {
+    setTimeout(() => {
+      document.addEventListener('click', () => {
+        actionMenuVisible.value[customerId] = false;
+      }, { once: true });
+    }, 0);
+  }
+};
+
+// Close all action menus
+const closeAllActionMenus = () => {
+  Object.keys(actionMenuVisible.value).forEach(id => {
+    actionMenuVisible.value[id] = false;
+  });
+};
+
 // Format date helper
 const formatDate = (dateString) => {
   const date = new Date(dateString);
@@ -39,9 +80,33 @@ const formatDate = (dateString) => {
   });
 };
 
-// Get customers on component mount
-onMounted(async () => {
-  await customerStore.fetchCustomers();
+// Close all action menus when clicking outside 
+const handleClickOutside = (event) => {
+  // If click is on or inside action button, don't do anything
+  // (the toggle action menu handler will take care of it)
+  if (event.target.closest('.action-button')) {
+    return;
+  }
+  
+  // If click is on an action-menu-item, don't close menus
+  // (they handle their own events)
+  if (event.target.closest('.action-menu-item')) {
+    return;
+  }
+  
+  // Otherwise, close all menus
+  closeAllActionMenus();
+};
+
+// Setup and cleanup event listeners
+onMounted(() => {
+  customerStore.fetchCustomers();
+  // We're now handling menu clicks with individual listeners
+  // document.addEventListener('click', handleClickOutside);
+});
+
+onBeforeUnmount(() => {
+  // document.removeEventListener('click', handleClickOutside);
 });
 
 // Reset create form
@@ -184,31 +249,104 @@ const submitCustomer = async () => {
         No customers yet. Add your first customer!
       </div>
       
-      <table v-else class="customers-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Phone</th>
-            <th>Company</th>
-            <th>Created</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="customer in customers" :key="customer.id">
-            <td>{{ customer.name }}</td>
-            <td>{{ customer.email }}</td>
-            <td>{{ customer.phone || 'N/A' }}</td>
-            <td>{{ customer.company || 'N/A' }}</td>
-            <td>{{ formatDate(customer.createdAt) }}</td>
-            <td class="actions">
-              <button class="btn small" @click="viewCustomer(customer)">View</button>
-              <button class="btn small secondary" @click="editCustomer(customer)">Edit</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-else>
+        <div class="sort-bar">
+          <span>Sort: </span>
+          <select class="sort-select">
+            <option value="a-z">A - Z</option>
+            <option value="z-a">Z - A</option>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+          </select>
+        </div>
+        
+        <div class="showing-info">
+          Showing {{ customers.length }} out of {{ customers.length }}
+        </div>
+      
+        <div class="customer-cards">
+          <div v-for="customer in customers" :key="customer.id" class="customer-card">
+            <div class="card-header">
+              <div class="expand-icon" @click="toggleCardExpansion(customer.id)">
+                <span>{{ expandedCards[customer.id] ? '▼' : '►' }}</span>
+              </div>
+              <div class="customer-id" @click="toggleCardExpansion(customer.id)">{{ customer.name }}</div>
+              <div class="card-actions">
+                <button class="action-button" @click.stop="toggleActionMenu($event, customer.id)">
+                  <span>⋮</span>
+                </button>
+                <div v-show="actionMenuVisible[customer.id]" class="action-menu">
+                  <div class="action-menu-item" @click.stop="viewCustomer(customer)">View Details</div>
+                  <div class="action-menu-item" @click.stop="editCustomer(customer)">Edit</div>
+                  <div class="action-menu-item danger" @click.stop="deleteCustomer(customer.id)">Delete</div>
+                </div>
+              </div>
+            </div>
+            
+            <div v-if="expandedCards[customer.id]" class="card-details">
+              <div class="detail-grid">
+                <div class="detail-column">
+                  <div class="detail-item">
+                    <div class="detail-label">First name</div>
+                    <div class="detail-value">{{ customer.name.split(' ')[0] || 'N/A' }}</div>
+                  </div>
+                  
+                  <div class="detail-item">
+                    <div class="detail-label">Last name</div>
+                    <div class="detail-value">{{ customer.name.split(' ').slice(1).join(' ') || 'N/A' }}</div>
+                  </div>
+                  
+                  <div class="detail-item">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value">{{ customer.email || 'N/A' }}</div>
+                  </div>
+                  
+                  <div class="detail-item">
+                    <div class="detail-label">Phone number</div>
+                    <div class="detail-value">{{ customer.phone || 'N/A' }}</div>
+                  </div>
+                </div>
+                
+                <div class="detail-column">
+                  <div class="detail-item">
+                    <div class="detail-label">Customer photo</div>
+                    <div class="detail-value">
+                      <div class="customer-avatar">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="50" height="50">
+                          <circle cx="50" cy="35" r="20" fill="#4361ee" />
+                          <circle cx="50" cy="95" r="40" fill="#4361ee" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="detail-item">
+                    <div class="detail-label">Company</div>
+                    <div class="detail-value">{{ customer.company || 'N/A' }}</div>
+                  </div>
+                  
+                  <div class="detail-item">
+                    <div class="detail-label">Address</div>
+                    <div class="detail-value">{{ customer.address || 'N/A' }}</div>
+                  </div>
+                  
+                  <div class="detail-item">
+                    <div class="detail-label">Created</div>
+                    <div class="detail-value">{{ formatDate(customer.createdAt) }}</div>
+                  </div>
+                </div>
+                
+                <div class="detail-column">
+                  <div class="detail-item full-width">
+                    <div class="detail-label">Bio</div>
+                    <div class="detail-value">{{ customer.notes || 'N/A' }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <!-- CREATE Customer Dialog Modal -->
@@ -473,6 +611,28 @@ const submitCustomer = async () => {
   padding-top: 20px;
 }
 
+.sort-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.sort-select {
+  padding: 5px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-left: 5px;
+  background-color: #f8f9fa;
+}
+
+.showing-info {
+  font-size: 14px;
+  color: #6c757d;
+  margin-bottom: 15px;
+  text-align: right;
+}
+
 .error-message {
   background-color: #ffd2d2;
   color: #d8000c;
@@ -564,33 +724,185 @@ const submitCustomer = async () => {
   font-size: 12px;
 }
 
-.customers-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.customers-table th,
-.customers-table td {
-  text-align: left;
-  padding: 12px;
-  border-bottom: 1px solid #e9ecef;
-}
-
-.customers-table th {
-  background-color: #f8f9fa;
-  font-weight: 600;
-}
-
-.actions {
-  display: flex;
-  gap: 5px;
-}
-
 .loading-message,
 .empty-message {
   text-align: center;
   padding: 30px;
   color: #6c757d;
+}
+
+/* Customer Card Styles */
+.customer-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.customer-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.expand-icon {
+  margin-right: 10px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.expand-icon:hover {
+  background-color: #e9ecef;
+}
+
+.customer-id {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.customer-id:hover {
+  color: #4361ee;
+}
+
+.card-actions {
+  display: flex;
+  position: absolute;
+  z-index: 200;
+  right: 46px;
+}
+
+.action-button {
+  background: none;
+  border: none;
+  font-size: 18px;
+  padding: 5px;
+  cursor: pointer;
+  color: #6c757d;
+}
+
+.action-button:hover {
+  color: #343a40;
+}
+
+.action-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  background-color: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.15);
+  z-index: 500;
+  min-width: 160px;
+  overflow: visible;
+  animation: fadeInMenu 0.15s ease-out;
+}
+
+@keyframes fadeInMenu {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.action-menu-item {
+  padding: 10px 15px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.action-menu-item:hover {
+  background-color: #f8f9fa;
+}
+
+.action-menu-item.danger {
+  color: #dc3545;
+}
+
+.action-menu-item.danger:hover {
+  background-color: #ffebee;
+}
+
+.card-details {
+  padding: 15px;
+  border-top: 1px solid #f0f0f0;
+  background-color: #ffffff;
+  animation: expandCard 0.2s ease-out;
+  transform-origin: top;
+}
+
+@keyframes expandCard {
+  from {
+    opacity: 0.7;
+    transform: scaleY(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.detail-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 15px;
+}
+
+.detail-column {
+  flex: 1;
+  min-width: 200px;
+}
+
+.detail-item {
+  margin-bottom: 15px;
+}
+
+.detail-item.full-width {
+  width: 100%;
+}
+
+.detail-label {
+  font-size: 14px;
+  color: #6c757d;
+  margin-bottom: 5px;
+}
+
+.detail-value {
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.customer-avatar {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
 }
 
 /* Modal Styles */

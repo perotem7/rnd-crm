@@ -46,8 +46,8 @@ onMounted(async () => {
         <div class="nav-item" :class="{ active: currentPath === '/analytics' }">
           <router-link to="/analytics">Analytics</router-link>
         </div>
-        <div class="nav-item" :class="{ active: currentPath === '/projects' }">
-          <router-link to="/projects">Projects</router-link>
+        <div class="nav-item" :class="{ active: currentPath === '/products' }">
+          <router-link to="/products">Products</router-link>
         </div>
         <div class="nav-item" :class="{ active: currentPath === '/customers' }">
           <router-link to="/customers">Customers</router-link>

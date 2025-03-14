@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const passport = require('passport');
 const session = require('express-session');
 const customersRoutes = require('./routes/customers');
+const productsRoutes = require('./routes/products');
 const authRoutes = require('./routes/auth');
 const setupPassport = require('./config/passport');
 
@@ -31,6 +32,7 @@ setupPassport();
 
 // API Routes
 app.use('/api/customers', customersRoutes);
+app.use('/api/products', productsRoutes);
 app.use('/api/auth', authRoutes);
 
 // Simple API endpoint
