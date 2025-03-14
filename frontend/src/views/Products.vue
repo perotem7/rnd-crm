@@ -6,12 +6,10 @@ import AddProductDialog from '../components/products/AddProductDialog.vue';
 
 const productStore = useProductStore();
 const authStore = useAuthStore();
-const { 
-  products, 
-  loading, 
-  error,
-  isCreating
-} = productStore;
+const products = computed(() => productStore.products);
+const loading = computed(() => productStore.loading);
+const error = computed(() => productStore.error);
+const isCreating = computed(() => productStore.isCreating);
 
 // Check if user is authenticated
 const isAuthenticated = computed(() => authStore.isAuthenticated);

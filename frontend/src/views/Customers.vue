@@ -4,12 +4,12 @@ import { useCustomerStore } from '../stores/customers';
 import CustomerDialog from '../components/customers/CustomerDialog.vue';
 
 const customerStore = useCustomerStore();
-const { 
-  customers, 
-  loading, 
-  error,
-  isCreating
-} = customerStore;
+
+// Convert destructured store state to computed properties to maintain reactivity
+const customers = computed(() => customerStore.customers);
+const loading = computed(() => customerStore.loading);
+const error = computed(() => customerStore.error);
+const isCreating = computed(() => customerStore.isCreating);
 
 // Modals state
 const showCustomerDialog = ref(false);
