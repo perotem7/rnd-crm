@@ -1,17 +1,43 @@
 <script setup>
-import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useAuthStore } from './stores/auth';
 
 const route = useRoute();
+const router = useRouter();
+const authStore = useAuthStore();
 
 // Computed property to get the current route path
 const currentPath = computed(() => route.path);
+
+// Computed property to check if the user is on an auth page
+const isAuthPage = computed(() => {
+  return route.path === '/login' || route.path === '/signup' || route.path === '/auth-callback';
+});
+
+// Logout function
+const logout = () => {
+  authStore.logout();
+  router.push('/login');
+};
+
+// Login function
+const login = () => {
+  router.push('/login');
+};
+
+// Fetch user data on component mount
+onMounted(async () => {
+  if (authStore.token && !authStore.user) {
+    await authStore.fetchUser();
+  }
+});
 </script>
 
 <template>
   <div class="app">
-    <!-- Sidebar -->
-    <div class="sidebar">
+    <!-- Sidebar - Only show if not on auth pages -->
+    <div v-if="!isAuthPage" class="sidebar">
       <div class="logo">R&D CRM</div>
       <nav class="nav-menu">
         <div class="nav-item" :class="{ active: currentPath === '/' }">
@@ -33,18 +59,25 @@ const currentPath = computed(() => route.path);
       
       <!-- User Profile Section -->
       <div class="user-profile">
-        <div class="user-avatar">
-          <img src="https://ui-avatars.com/api/?name=User&background=7e3af2&color=fff" alt="User Avatar" />
+        <div v-if="authStore.isAuthenticated" class="user-profile-authenticated">
+          <div class="user-avatar" :class="{ 'default-avatar': !authStore.user?.avatar }">
+            <img v-if="authStore.user?.avatar && false" :src="authStore.user.avatar" alt="User Avatar" />
+            <span v-else class="user-icon">👤</span>
+          </div>
+          <div class="user-info">
+            <div class="user-name">{{ authStore.user?.name || 'User' }}</div>
+            <div class="user-email">{{ authStore.user?.email }}</div>
+            <a href="#" @click.prevent="logout" class="user-logout">Logout</a>
+          </div>
         </div>
-        <div class="user-info">
-          <div class="user-name">User Name</div>
-          <router-link to="/settings" class="user-settings">View Profile</router-link>
+        <div v-else class="user-profile-unauthenticated">
+          <button @click="login" class="login-button">Login / Sign up</button>
         </div>
       </div>
     </div>
     
     <!-- Main Content Area -->
-    <main class="main-content">
+    <main :class="{ 'main-content': !isAuthPage, 'auth-content': isAuthPage }">
       <router-view />
     </main>
   </div>
@@ -128,18 +161,36 @@ body {
   flex-shrink: 0; /* Prevents the profile from shrinking */
 }
 
+.user-profile-authenticated {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
 .user-avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
   overflow: hidden;
   margin-right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.default-avatar {
+  background-color: #7e3af2;
 }
 
 .user-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.user-icon {
+  font-size: 18px;
+  line-height: 1;
 }
 
 .user-info {
@@ -154,15 +205,41 @@ body {
   line-height: 1.1;
 }
 
-.user-settings {
+.user-email {
+  font-size: 10px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.user-logout {
   font-size: 10px;
   color: #7e3af2;
   text-decoration: none;
-  margin-top: 1px;
+  margin-top: 3px;
 }
 
-.user-settings:hover {
+.user-logout:hover {
   text-decoration: underline;
+}
+
+.user-profile-unauthenticated {
+  width: 100%;
+}
+
+.login-button {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: #7e3af2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.login-button:hover {
+  background-color: #6929d4;
 }
 
 .main-content {
@@ -170,5 +247,11 @@ body {
   padding: 0;
   overflow-y: auto;
   margin: 15px 15px 15px 0;
+}
+
+.auth-content {
+  flex: 1;
+  padding: 0;
+  margin: 0;
 }
 </style>
