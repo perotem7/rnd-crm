@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useProductStore } from '../../stores/products';
 import { useAuthStore } from '../../stores/auth';
 
@@ -7,25 +7,47 @@ const props = defineProps({
   show: {
     type: Boolean,
     default: false
+  },
+  product: {
+    type: Object,
+    default: null
+  },
+  isEditMode: {
+    type: Boolean,
+    default: false
   }
 });
 
-const emit = defineEmits(['close', 'product-added']);
+const emit = defineEmits(['close', 'product-added', 'product-updated']);
 
 const productStore = useProductStore();
 const authStore = useAuthStore();
-const { isCreating } = productStore;
+const { isCreating, loading } = productStore;
 
 // Product data
-const newProduct = ref({
+const productData = ref({
   name: '',
   description: ''
 });
 const formError = ref('');
 
-// Reset create form
+// Watch for changes in product prop and isEditMode
+watch(() => props.product, (newProduct) => {
+  if (newProduct && props.isEditMode) {
+    productData.value = { ...newProduct };
+  }
+}, { immediate: true });
+
+// Watch for dialog visibility
+watch(() => props.show, (isVisible) => {
+  if (isVisible && !props.isEditMode) {
+    resetForm();
+  }
+});
+
+// Reset form
 const resetForm = () => {
-  newProduct.value = {
+  productData.value = {
     name: '',
     description: ''
   };
@@ -38,31 +60,37 @@ const closeDialog = () => {
   emit('close');
 };
 
-// Submit new product
-const submitNewProduct = async () => {
+// Submit product (create or update)
+const submitProduct = async () => {
   // Basic validation
-  if (!newProduct.value.name) {
+  if (!productData.value.name) {
     formError.value = 'Name is required';
     return;
   }
 
   try {
-    console.log('Submitting product:', newProduct.value);
-    console.log('Auth status before submit:', !!authStore.token);
-    console.log('Token before submit:', authStore.token?.substring(0, 10) + '...');
-    
-    const created = await productStore.createProduct(newProduct.value);
-    console.log('Response from createProduct:', created);
-    
-    if (created) {
-      emit('product-added', created);
-      closeDialog();
+    if (props.isEditMode) {
+      // Update existing product
+      const updated = await productStore.updateProduct(props.product.id, productData.value);
+      if (updated) {
+        emit('product-updated', updated);
+        closeDialog();
+      } else {
+        formError.value = productStore.error || 'Failed to update product';
+      }
     } else {
-      formError.value = productStore.error || 'Failed to create product';
+      // Create new product
+      const created = await productStore.createProduct(productData.value);
+      if (created) {
+        emit('product-added', created);
+        closeDialog();
+      } else {
+        formError.value = productStore.error || 'Failed to create product';
+      }
     }
   } catch (err) {
-    console.error('Error creating product (detailed):', err);
-    formError.value = err.message || 'Error creating product';
+    console.error('Error saving product:', err);
+    formError.value = err.message || 'Error saving product';
   }
 };
 </script>
@@ -71,7 +99,7 @@ const submitNewProduct = async () => {
   <div v-if="show" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Add New Product</h2>
+        <h2>{{ isEditMode ? 'Edit Product' : 'Add New Product' }}</h2>
         <button @click="closeDialog" class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
@@ -79,18 +107,18 @@ const submitNewProduct = async () => {
         
         <div class="form-group">
           <label for="name">Product Name *</label>
-          <input type="text" id="name" v-model="newProduct.name" placeholder="Product name">
+          <input type="text" id="name" v-model="productData.name" placeholder="Product name">
         </div>
         
         <div class="form-group">
           <label for="description">Description</label>
-          <textarea id="description" v-model="newProduct.description" placeholder="Product description"></textarea>
+          <textarea id="description" v-model="productData.description" placeholder="Product description"></textarea>
         </div>
       </div>
       <div class="modal-footer">
         <button @click="closeDialog" class="btn secondary">Cancel</button>
-        <button @click="submitNewProduct" class="btn primary" :disabled="isCreating">
-          {{ isCreating ? 'Creating...' : 'Create Product' }}
+        <button @click="submitProduct" class="btn primary" :disabled="loading">
+          {{ loading ? (isEditMode ? 'Saving...' : 'Creating...') : (isEditMode ? 'Save Changes' : 'Create Product') }}
         </button>
       </div>
     </div>

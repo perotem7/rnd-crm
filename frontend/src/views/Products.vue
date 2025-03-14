@@ -24,12 +24,11 @@ const checkAuth = () => {
 // Modals state
 const showCreateDialog = ref(false);
 const showViewDialog = ref(false);
-const showEditDialog = ref(false);
+const currentDialog = ref('create'); // 'create' or 'edit'
 
 // Product data
 const selectedProduct = ref(null);
 const editingProduct = ref(null);
-const formError = ref('');
 
 // Track expanded product cards
 const expandedCards = ref({});
@@ -119,6 +118,7 @@ onBeforeUnmount(() => {
 
 // Toggle create dialog
 const toggleCreateDialog = () => {
+  currentDialog.value = 'create';
   showCreateDialog.value = !showCreateDialog.value;
 };
 
@@ -126,6 +126,12 @@ const toggleCreateDialog = () => {
 const handleProductAdded = (product) => {
   console.log('Product added:', product);
   // The product is already added to the store by the component
+};
+
+// Handle product updated event
+const handleProductUpdated = (product) => {
+  console.log('Product updated:', product);
+  // The product is already updated in the store by the component
 };
 
 // Open view dialog for a product
@@ -144,33 +150,8 @@ const closeViewDialog = () => {
 const editProduct = (product) => {
   // Create a deep copy to avoid mutating the original
   editingProduct.value = JSON.parse(JSON.stringify(product));
-  showEditDialog.value = true;
-  formError.value = '';
-};
-
-// Close edit dialog
-const closeEditDialog = () => {
-  showEditDialog.value = false;
-  editingProduct.value = null;
-  formError.value = '';
-};
-
-// Submit edited product
-const submitEditedProduct = async () => {
-  // Basic validation
-  if (!editingProduct.value.name) {
-    formError.value = 'Name is required';
-    return;
-  }
-
-  try {
-    const updated = await productStore.updateProduct(editingProduct.value.id, editingProduct.value);
-    if (updated) {
-      closeEditDialog();
-    }
-  } catch (err) {
-    console.error('Error updating product:', err);
-  }
+  currentDialog.value = 'edit';
+  showCreateDialog.value = true;
 };
 
 // Delete product
@@ -267,11 +248,14 @@ const deleteProduct = async (id) => {
       </div>
     </div>
     
-    <!-- Add Product Dialog Component -->
+    <!-- Add/Edit Product Dialog Component -->
     <AddProductDialog 
       :show="showCreateDialog" 
-      @close="toggleCreateDialog"
+      :product="editingProduct"
+      :is-edit-mode="currentDialog === 'edit'"
+      @close="showCreateDialog = false"
       @product-added="handleProductAdded"
+      @product-updated="handleProductUpdated"
     />
     
     <!-- View Product Dialog -->
@@ -300,35 +284,6 @@ const deleteProduct = async (id) => {
         <div class="modal-footer">
           <button @click="closeViewDialog" class="btn secondary">Close</button>
           <button @click="editProduct(selectedProduct)" class="btn primary">Edit</button>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Edit Product Dialog -->
-    <div v-if="showEditDialog" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Edit Product</h2>
-          <button @click="closeEditDialog" class="close-btn">&times;</button>
-        </div>
-        <div class="modal-body" v-if="editingProduct">
-          <div v-if="formError" class="form-error">{{ formError }}</div>
-          
-          <div class="form-group">
-            <label for="edit-name">Product Name *</label>
-            <input type="text" id="edit-name" v-model="editingProduct.name" placeholder="Product name">
-          </div>
-          
-          <div class="form-group">
-            <label for="edit-description">Description</label>
-            <textarea id="edit-description" v-model="editingProduct.description" placeholder="Product description"></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button @click="closeEditDialog" class="btn secondary">Cancel</button>
-          <button @click="submitEditedProduct" class="btn primary" :disabled="loading">
-            {{ loading ? 'Saving...' : 'Save Changes' }}
-          </button>
         </div>
       </div>
     </div>
