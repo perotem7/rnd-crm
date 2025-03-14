@@ -1,14 +1,24 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useProductStore } from '../stores/products';
+import { useAuthStore } from '../stores/auth';
 
 const productStore = useProductStore();
+const authStore = useAuthStore();
 const { 
   products, 
   loading, 
   error,
   isCreating
 } = productStore;
+
+// Check if user is authenticated
+const isAuthenticated = computed(() => authStore.isAuthenticated);
+const checkAuth = () => {
+  console.log('Authentication status:', isAuthenticated.value);
+  console.log('User:', authStore.currentUser);
+  console.log('Token exists:', !!authStore.token);
+};
 
 // Modals state
 const showCreateDialog = ref(false);
@@ -18,11 +28,7 @@ const showEditDialog = ref(false);
 // Product data
 const newProduct = ref({
   name: '',
-  description: '',
-  price: '',
-  sku: '',
-  category: '',
-  stockLevel: 0
+  description: ''
 });
 
 const selectedProduct = ref(null);
@@ -49,6 +55,7 @@ const formatDate = (dateString) => {
 
 // Get products on component mount
 onMounted(async () => {
+  checkAuth();
   await productStore.fetchProducts();
 });
 
@@ -56,11 +63,7 @@ onMounted(async () => {
 const resetCreateForm = () => {
   newProduct.value = {
     name: '',
-    description: '',
-    price: '',
-    sku: '',
-    category: '',
-    stockLevel: 0
+    description: ''
   };
   formError.value = '';
 };
@@ -103,8 +106,8 @@ const closeEditDialog = () => {
 // Submit edited product
 const submitEditedProduct = async () => {
   // Basic validation
-  if (!editingProduct.value.name || !editingProduct.value.price || !editingProduct.value.sku) {
-    formError.value = 'Name, price, and SKU are required';
+  if (!editingProduct.value.name) {
+    formError.value = 'Name is required';
     return;
   }
 
@@ -121,8 +124,8 @@ const submitEditedProduct = async () => {
 // Submit new product
 const submitNewProduct = async () => {
   // Basic validation
-  if (!newProduct.value.name || !newProduct.value.price || !newProduct.value.sku) {
-    formError.value = 'Name, price, and SKU are required';
+  if (!newProduct.value.name) {
+    formError.value = 'Name is required';
     return;
   }
 
@@ -174,20 +177,14 @@ const deleteProduct = async (id) => {
       <thead>
         <tr>
           <th>Name</th>
-          <th>SKU</th>
-          <th>Price</th>
-          <th>Stock</th>
-          <th>Category</th>
+          <th>Description</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="product in products" :key="product.id">
           <td>{{ product.name }}</td>
-          <td>{{ product.sku }}</td>
-          <td>{{ formatPrice(product.price) }}</td>
-          <td>{{ product.stockLevel }}</td>
-          <td>{{ product.category || '-' }}</td>
+          <td>{{ product.description || '-' }}</td>
           <td class="actions">
             <button @click="viewProduct(product)" class="btn-view">View</button>
             <button @click="editProduct(product)" class="btn-edit">Edit</button>
@@ -216,30 +213,6 @@ const deleteProduct = async (id) => {
             <label for="description">Description</label>
             <textarea id="description" v-model="newProduct.description" placeholder="Product description"></textarea>
           </div>
-          
-          <div class="form-row">
-            <div class="form-group">
-              <label for="price">Price *</label>
-              <input type="number" id="price" v-model="newProduct.price" placeholder="0.00" min="0" step="0.01">
-            </div>
-            
-            <div class="form-group">
-              <label for="sku">SKU *</label>
-              <input type="text" id="sku" v-model="newProduct.sku" placeholder="SKU">
-            </div>
-          </div>
-          
-          <div class="form-row">
-            <div class="form-group">
-              <label for="category">Category</label>
-              <input type="text" id="category" v-model="newProduct.category" placeholder="Category">
-            </div>
-            
-            <div class="form-group">
-              <label for="stockLevel">Stock Level</label>
-              <input type="number" id="stockLevel" v-model="newProduct.stockLevel" placeholder="0" min="0">
-            </div>
-          </div>
         </div>
         <div class="modal-footer">
           <button @click="toggleCreateDialog" class="btn-secondary">Cancel</button>
@@ -264,26 +237,6 @@ const deleteProduct = async (id) => {
           </div>
           
           <div class="detail-row">
-            <div class="detail-label">SKU:</div>
-            <div class="detail-value">{{ selectedProduct.sku }}</div>
-          </div>
-          
-          <div class="detail-row">
-            <div class="detail-label">Price:</div>
-            <div class="detail-value">{{ formatPrice(selectedProduct.price) }}</div>
-          </div>
-          
-          <div class="detail-row">
-            <div class="detail-label">Stock Level:</div>
-            <div class="detail-value">{{ selectedProduct.stockLevel }}</div>
-          </div>
-          
-          <div class="detail-row">
-            <div class="detail-label">Category:</div>
-            <div class="detail-value">{{ selectedProduct.category || '-' }}</div>
-          </div>
-          
-          <div class="detail-row">
             <div class="detail-label">Description:</div>
             <div class="detail-value description">{{ selectedProduct.description || '-' }}</div>
           </div>
@@ -292,16 +245,10 @@ const deleteProduct = async (id) => {
             <div class="detail-label">Created:</div>
             <div class="detail-value">{{ formatDate(selectedProduct.createdAt) }}</div>
           </div>
-          
-          <div class="detail-row">
-            <div class="detail-label">Last Updated:</div>
-            <div class="detail-value">{{ formatDate(selectedProduct.updatedAt) }}</div>
-          </div>
         </div>
         <div class="modal-footer">
           <button @click="closeViewDialog" class="btn-secondary">Close</button>
           <button @click="editProduct(selectedProduct)" class="btn-primary">Edit</button>
-          <button @click="deleteProduct(selectedProduct.id)" class="btn-delete">Delete</button>
         </div>
       </div>
     </div>
@@ -324,30 +271,6 @@ const deleteProduct = async (id) => {
           <div class="form-group">
             <label for="edit-description">Description</label>
             <textarea id="edit-description" v-model="editingProduct.description" placeholder="Product description"></textarea>
-          </div>
-          
-          <div class="form-row">
-            <div class="form-group">
-              <label for="edit-price">Price *</label>
-              <input type="number" id="edit-price" v-model="editingProduct.price" placeholder="0.00" min="0" step="0.01">
-            </div>
-            
-            <div class="form-group">
-              <label for="edit-sku">SKU *</label>
-              <input type="text" id="edit-sku" v-model="editingProduct.sku" placeholder="SKU">
-            </div>
-          </div>
-          
-          <div class="form-row">
-            <div class="form-group">
-              <label for="edit-category">Category</label>
-              <input type="text" id="edit-category" v-model="editingProduct.category" placeholder="Category">
-            </div>
-            
-            <div class="form-group">
-              <label for="edit-stockLevel">Stock Level</label>
-              <input type="number" id="edit-stockLevel" v-model="editingProduct.stockLevel" placeholder="0" min="0">
-            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -500,10 +423,12 @@ const deleteProduct = async (id) => {
   background-color: white;
   border-radius: 8px;
   width: 90%;
-  max-width: 600px;
+  max-width: 700px;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
@@ -534,6 +459,9 @@ const deleteProduct = async (id) => {
 
 .modal-body {
   padding: 20px;
+  box-sizing: border-box;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .modal-footer {
@@ -548,12 +476,15 @@ const deleteProduct = async (id) => {
 .form-group {
   margin-bottom: 15px;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .form-row {
   display: flex;
   gap: 15px;
   margin-bottom: 15px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 label {
@@ -569,6 +500,7 @@ input, textarea {
   border: 1px solid #ced4da;
   border-radius: 4px;
   font-size: 14px;
+  box-sizing: border-box;
 }
 
 textarea {

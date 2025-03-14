@@ -42,37 +42,28 @@ router.get('/:id', async (req, res) => {
 // Create a new product
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { name, description, price, sku, category, stockLevel } = req.body;
+    console.log('Creating product with request body:', req.body);
+    const { name, description } = req.body;
     
     // Validation
-    if (!name || !price || !sku) {
-      return res.status(400).json({ error: 'Name, price, and SKU are required' });
+    if (!name) {
+      console.log('Validation failed: Name is required');
+      return res.status(400).json({ error: 'Name is required' });
     }
     
-    // Check if SKU is already in use
-    const existingProduct = await prisma.product.findUnique({
-      where: { sku },
-    });
-    
-    if (existingProduct) {
-      return res.status(400).json({ error: 'SKU already in use' });
-    }
-    
+    console.log('Attempting to create product with data:', { name, description });
     const product = await prisma.product.create({
       data: {
         name,
         description,
-        price: parseFloat(price),
-        sku,
-        category,
-        stockLevel: stockLevel ? parseInt(stockLevel) : 0,
       },
     });
     
+    console.log('Product created successfully:', product);
     res.status(201).json(product);
   } catch (error) {
-    console.error('Error creating product:', error);
-    res.status(500).json({ error: 'Failed to create product' });
+    console.error('Detailed error creating product:', error);
+    res.status(500).json({ error: 'Failed to create product: ' + error.message });
   }
 });
 
@@ -80,20 +71,11 @@ router.post('/', authenticate, async (req, res) => {
 router.put('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, price, sku, category, stockLevel } = req.body;
+    const { name, description } = req.body;
     
     // Validation
-    if (!name || !price || !sku) {
-      return res.status(400).json({ error: 'Name, price, and SKU are required' });
-    }
-    
-    // Check if SKU is already in use by another product
-    const existingProduct = await prisma.product.findUnique({
-      where: { sku },
-    });
-    
-    if (existingProduct && existingProduct.id !== Number(id)) {
-      return res.status(400).json({ error: 'SKU already in use by another product' });
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
     }
     
     const product = await prisma.product.update({
@@ -101,10 +83,6 @@ router.put('/:id', authenticate, async (req, res) => {
       data: {
         name,
         description,
-        price: parseFloat(price),
-        sku,
-        category,
-        stockLevel: stockLevel ? parseInt(stockLevel) : 0,
       },
     });
     
