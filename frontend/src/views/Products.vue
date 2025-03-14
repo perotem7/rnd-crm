@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useProductStore } from '../stores/products';
 import { useAuthStore } from '../stores/auth';
 
@@ -35,6 +35,47 @@ const selectedProduct = ref(null);
 const editingProduct = ref(null);
 const formError = ref('');
 
+// Track expanded product cards
+const expandedCards = ref({});
+
+// Track action menu visibility 
+const actionMenuVisible = ref({});
+
+// Toggle card expansion
+const toggleCardExpansion = (productId) => {
+  expandedCards.value[productId] = !expandedCards.value[productId];
+};
+
+// Toggle action menu
+const toggleActionMenu = (event, productId) => {
+  event.stopPropagation();
+  
+  // Get the current state
+  const isCurrentlyVisible = actionMenuVisible.value[productId];
+  
+  // Close all other menus first
+  closeAllActionMenus();
+  
+  // Toggle this menu (only set to true if it was false before)
+  actionMenuVisible.value[productId] = !isCurrentlyVisible;
+  
+  // If we're opening a menu, add a one-time event listener to close it when clicking elsewhere
+  if (actionMenuVisible.value[productId]) {
+    setTimeout(() => {
+      document.addEventListener('click', () => {
+        actionMenuVisible.value[productId] = false;
+      }, { once: true });
+    }, 0);
+  }
+};
+
+// Close all action menus
+const closeAllActionMenus = () => {
+  Object.keys(actionMenuVisible.value).forEach(id => {
+    actionMenuVisible.value[id] = false;
+  });
+};
+
 // Format price helper
 const formatPrice = (price) => {
   return new Intl.NumberFormat('en-US', {
@@ -53,10 +94,31 @@ const formatDate = (dateString) => {
   });
 };
 
-// Get products on component mount
-onMounted(async () => {
+// Handle click outside for action menus
+const handleClickOutside = (event) => {
+  // If click is on or inside action button, don't do anything
+  if (event.target.closest('.action-button')) {
+    return;
+  }
+  
+  // If click is on an action-menu-item, don't close menus
+  if (event.target.closest('.action-menu-item')) {
+    return;
+  }
+  
+  // Otherwise, close all menus
+  closeAllActionMenus();
+};
+
+// Add and remove global click handler
+onMounted(() => {
   checkAuth();
-  await productStore.fetchProducts();
+  document.addEventListener('click', handleClickOutside);
+  productStore.fetchProducts();
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside);
 });
 
 // Reset create form
@@ -130,12 +192,21 @@ const submitNewProduct = async () => {
   }
 
   try {
+    console.log('Submitting product:', newProduct.value);
+    console.log('Auth status before submit:', isAuthenticated.value);
+    console.log('Token before submit:', authStore.token?.substring(0, 10) + '...');
+    
     const created = await productStore.createProduct(newProduct.value);
+    console.log('Response from createProduct:', created);
+    
     if (created) {
       toggleCreateDialog();
+    } else {
+      formError.value = productStore.error || 'Failed to create product';
     }
   } catch (err) {
-    console.error('Error creating product:', err);
+    console.error('Error creating product (detailed):', err);
+    formError.value = err.message || 'Error creating product';
   }
 };
 
@@ -158,7 +229,7 @@ const deleteProduct = async (id) => {
   <div class="products-container">
     <div class="products-header">
       <h1>Products</h1>
-      <button @click="toggleCreateDialog" class="btn-primary">Add Product</button>
+      <button @click="toggleCreateDialog" class="btn primary">Add Product</button>
     </div>
     
     <div v-if="loading && !products.length" class="loading-message">
@@ -173,26 +244,65 @@ const deleteProduct = async (id) => {
       No products found. Click "Add Product" to create one.
     </div>
     
-    <table v-else class="products-table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Description</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="product in products" :key="product.id">
-          <td>{{ product.name }}</td>
-          <td>{{ product.description || '-' }}</td>
-          <td class="actions">
-            <button @click="viewProduct(product)" class="btn-view">View</button>
-            <button @click="editProduct(product)" class="btn-edit">Edit</button>
-            <button @click="deleteProduct(product.id)" class="btn-delete">Delete</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-else class="products-content">
+      <div class="sort-bar">
+        <span>Sort: </span>
+        <select class="sort-select">
+          <option value="a-z">A - Z</option>
+          <option value="z-a">Z - A</option>
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+        </select>
+      </div>
+      
+      <div class="showing-info">
+        Showing {{ products.length }} out of {{ products.length }}
+      </div>
+    
+      <div class="product-cards">
+        <div v-for="product in products" :key="product.id" class="product-card">
+          <div class="card-header">
+            <div class="expand-icon" @click="toggleCardExpansion(product.id)">
+              <span>{{ expandedCards[product.id] ? '▼' : '►' }}</span>
+            </div>
+            <div class="product-name" @click="toggleCardExpansion(product.id)">{{ product.name }}</div>
+            <div class="card-actions">
+              <button class="action-button" @click.stop="toggleActionMenu($event, product.id)">
+                <span>⋮</span>
+              </button>
+              <div v-show="actionMenuVisible[product.id]" class="action-menu">
+                <div class="action-menu-item" @click.stop="viewProduct(product)">View Details</div>
+                <div class="action-menu-item" @click.stop="editProduct(product)">Edit</div>
+                <div class="action-menu-item danger" @click.stop="deleteProduct(product.id)">Delete</div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-if="expandedCards[product.id]" class="card-details">
+            <div class="detail-grid">
+              <div class="detail-column">
+                <div class="detail-item">
+                  <div class="detail-label">Name</div>
+                  <div class="detail-value">{{ product.name }}</div>
+                </div>
+                
+                <div class="detail-item">
+                  <div class="detail-label">Created</div>
+                  <div class="detail-value">{{ formatDate(product.createdAt) }}</div>
+                </div>
+              </div>
+              
+              <div class="detail-column">
+                <div class="detail-item full-width">
+                  <div class="detail-label">Description</div>
+                  <div class="detail-value">{{ product.description || 'No description available' }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     
     <!-- Create Product Dialog -->
     <div v-if="showCreateDialog" class="modal">
@@ -215,8 +325,8 @@ const deleteProduct = async (id) => {
           </div>
         </div>
         <div class="modal-footer">
-          <button @click="toggleCreateDialog" class="btn-secondary">Cancel</button>
-          <button @click="submitNewProduct" class="btn-primary" :disabled="isCreating">
+          <button @click="toggleCreateDialog" class="btn secondary">Cancel</button>
+          <button @click="submitNewProduct" class="btn primary" :disabled="isCreating">
             {{ isCreating ? 'Creating...' : 'Create Product' }}
           </button>
         </div>
@@ -247,8 +357,8 @@ const deleteProduct = async (id) => {
           </div>
         </div>
         <div class="modal-footer">
-          <button @click="closeViewDialog" class="btn-secondary">Close</button>
-          <button @click="editProduct(selectedProduct)" class="btn-primary">Edit</button>
+          <button @click="closeViewDialog" class="btn secondary">Close</button>
+          <button @click="editProduct(selectedProduct)" class="btn primary">Edit</button>
         </div>
       </div>
     </div>
@@ -274,8 +384,8 @@ const deleteProduct = async (id) => {
           </div>
         </div>
         <div class="modal-footer">
-          <button @click="closeEditDialog" class="btn-secondary">Cancel</button>
-          <button @click="submitEditedProduct" class="btn-primary" :disabled="loading">
+          <button @click="closeEditDialog" class="btn secondary">Cancel</button>
+          <button @click="submitEditedProduct" class="btn primary" :disabled="loading">
             {{ loading ? 'Saving...' : 'Save Changes' }}
           </button>
         </div>
@@ -290,46 +400,42 @@ const deleteProduct = async (id) => {
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-top: 0;
 }
 
 .products-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
+  margin-bottom: 20px;
+  padding-top: 20px;
 }
 
 .products-header h1 {
   margin: 0;
   font-size: 24px;
-  color: #333;
 }
 
-.products-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-}
-
-.products-table th {
-  text-align: left;
-  padding: 12px 15px;
-  background-color: #f8f9fa;
-  border-bottom: 2px solid #dee2e6;
-  font-size: 14px;
-  font-weight: 600;
-  color: #495057;
-}
-
-.products-table td {
-  padding: 12px 15px;
-  border-bottom: 1px solid #dee2e6;
-  font-size: 14px;
-}
-
-.actions {
+.sort-bar {
   display: flex;
-  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.sort-select {
+  padding: 5px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-left: 5px;
+  background-color: #f8f9fa;
+}
+
+.showing-info {
+  font-size: 14px;
+  color: #6c757d;
+  margin-bottom: 15px;
+  text-align: right;
 }
 
 .loading-message, .error-message, .empty-message {
@@ -342,70 +448,218 @@ const deleteProduct = async (id) => {
   color: #dc3545;
 }
 
-.btn-primary {
-  background-color: #7e3af2;
-  color: white;
-  border: none;
-  padding: 8px 16px;
+/* Product Card Styles */
+.product-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.product-card {
+  border: 1px solid #e0e0e0;
   border-radius: 4px;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.expand-icon {
+  margin-right: 10px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
   cursor: pointer;
+}
+
+.expand-icon:hover {
+  background-color: #e9ecef;
+}
+
+.product-name {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.product-name:hover {
+  color: #7e3af2;
+}
+
+.card-actions {
+  display: flex;
+  position: absolute;
+  z-index: 200;
+  right: 46px;
+}
+
+.action-button {
+  background: none;
+  border: none;
+  font-size: 18px;
+  padding: 5px;
+  cursor: pointer;
+  color: #6c757d;
+}
+
+.action-button:hover {
+  color: #343a40;
+}
+
+.action-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  background-color: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.15);
+  z-index: 500;
+  min-width: 160px;
+  overflow: visible;
+  animation: fadeInMenu 0.15s ease-out;
+}
+
+@keyframes fadeInMenu {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.action-menu-item {
+  padding: 10px 15px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.action-menu-item:hover {
+  background-color: #f8f9fa;
+}
+
+.action-menu-item.danger {
+  color: #dc3545;
+}
+
+.action-menu-item.danger:hover {
+  background-color: #ffebee;
+}
+
+.card-details {
+  padding: 15px;
+  border-top: 1px solid #f0f0f0;
+  background-color: #ffffff;
+  animation: expandCard 0.2s ease-out;
+  transform-origin: top;
+}
+
+@keyframes expandCard {
+  from {
+    opacity: 0.7;
+    transform: scaleY(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.detail-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 15px;
+}
+
+.detail-column {
+  flex: 1;
+  min-width: 200px;
+}
+
+.detail-item {
+  margin-bottom: 15px;
+}
+
+.detail-item.full-width {
+  width: 100%;
+}
+
+.detail-label {
+  font-size: 14px;
+  color: #6c757d;
+  margin-bottom: 5px;
+}
+
+.detail-value {
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.detail-row {
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.detail-row .detail-label {
+  width: 150px;
+  font-weight: 600;
+  color: #495057;
   font-size: 14px;
 }
 
-.btn-primary:hover {
-  background-color: #6929d4;
-}
-
-.btn-secondary {
-  background-color: #e9ecef;
-  color: #495057;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
+.detail-row .detail-value {
+  flex: 1;
   font-size: 14px;
 }
 
-.btn-secondary:hover {
-  background-color: #dee2e6;
-}
-
-.btn-view, .btn-edit, .btn-delete {
-  padding: 5px 10px;
-  border-radius: 4px;
+.btn {
+  padding: 8px 16px;
   border: none;
+  border-radius: 4px;
+  font-weight: 500;
   cursor: pointer;
-  font-size: 12px;
+  transition: background-color 0.2s;
 }
 
-.btn-view {
-  background-color: #e9ecef;
-  color: #495057;
-}
-
-.btn-edit {
+.btn.primary {
   background-color: #7e3af2;
   color: white;
 }
 
-.btn-delete {
-  background-color: #dc3545;
-  color: white;
-}
-
-.btn-view:hover {
-  background-color: #dee2e6;
-}
-
-.btn-edit:hover {
+.btn.primary:hover {
   background-color: #6929d4;
 }
 
-.btn-delete:hover {
-  background-color: #c82333;
+.btn.secondary {
+  background-color: #e9ecef;
+  color: #495057;
 }
 
-/* Modal Styles */
+.btn.secondary:hover {
+  background-color: #dee2e6;
+}
+
+.btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .modal {
   position: fixed;
   top: 0;
@@ -472,22 +726,13 @@ const deleteProduct = async (id) => {
   gap: 10px;
 }
 
-/* Form Styles */
 .form-group {
   margin-bottom: 15px;
   width: 100%;
   box-sizing: border-box;
 }
 
-.form-row {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 15px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-label {
+.form-group label {
   display: block;
   margin-bottom: 5px;
   font-size: 14px;
@@ -514,30 +759,7 @@ textarea {
   font-size: 14px;
 }
 
-/* Detail View Styles */
-.detail-row {
-  display: flex;
-  margin-bottom: 12px;
-}
-
-.detail-label {
-  width: 150px;
-  font-weight: 600;
-  color: #495057;
-  font-size: 14px;
-}
-
-.detail-value {
-  flex: 1;
-  font-size: 14px;
-}
-
 .description {
   white-space: pre-line;
-}
-
-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
 }
 </style> 
