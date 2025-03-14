@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useCustomerStore } from '../stores/customers';
 import CustomerDialog from '../components/customers/CustomerDialog.vue';
+import ProductAssociationDialog from '../components/customers/ProductAssociationDialog.vue';
 
 const customerStore = useCustomerStore();
 
@@ -11,13 +12,14 @@ const loading = computed(() => customerStore.loading);
 const error = computed(() => customerStore.error);
 const isCreating = computed(() => customerStore.isCreating);
 
+// Customer data
+const selectedCustomer = ref(null);
+
 // Modals state
 const showCustomerDialog = ref(false);
 const showViewDialog = ref(false);
+const showProductDialog = ref(false);
 const isEditMode = ref(false);
-
-// Customer data
-const selectedCustomer = ref(null);
 
 // Track expanded customer cards
 const expandedCards = ref({});
@@ -132,6 +134,19 @@ const closeCustomerDialog = () => {
   selectedCustomer.value = null;
 };
 
+// Open product association dialog
+const openProductDialog = (customer) => {
+  selectedCustomer.value = customer;
+  showProductDialog.value = true;
+  closeAllActionMenus();
+};
+
+// Close product dialog
+const closeProductDialog = () => {
+  showProductDialog.value = false;
+  selectedCustomer.value = null;
+};
+
 // Handle customer added event
 const handleCustomerAdded = (customer) => {
   // You could add additional logic here if needed
@@ -158,6 +173,7 @@ const handleKeydown = (e) => {
   if (e.key === 'Escape') {
     if (showCustomerDialog.value) closeCustomerDialog();
     if (showViewDialog.value) closeViewDialog();
+    if (showProductDialog.value) closeProductDialog();
   }
 };
 </script>
@@ -215,6 +231,7 @@ const handleKeydown = (e) => {
                 <div v-show="actionMenuVisible[customer.id]" class="action-menu">
                   <div class="action-menu-item" @click.stop="viewCustomer(customer)">View Details</div>
                   <div class="action-menu-item" @click.stop="openEditDialog(customer)">Edit</div>
+                  <div class="action-menu-item" @click.stop="openProductDialog(customer)">Products</div>
                   <div class="action-menu-item danger" @click.stop="deleteCustomer(customer.id)">Delete</div>
                 </div>
               </div>
@@ -333,6 +350,14 @@ const handleKeydown = (e) => {
       @close="closeCustomerDialog"
       @customer-added="handleCustomerAdded"
       @customer-updated="handleCustomerUpdated"
+    />
+    
+    <!-- Product Association Dialog -->
+    <ProductAssociationDialog
+      :show="showProductDialog"
+      :customer="selectedCustomer"
+      @close="closeProductDialog"
+      @products-updated="handleCustomerUpdated"
     />
   </div>
 </template>
