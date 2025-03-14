@@ -61,7 +61,7 @@ onMounted(async () => {
       <div class="user-profile">
         <div v-if="authStore.isAuthenticated" class="user-profile-authenticated">
           <div class="user-avatar" :class="{ 'default-avatar': !authStore.user?.avatar }">
-            <img v-if="authStore.user?.avatar && false" :src="authStore.user.avatar" alt="User Avatar" />
+            <img v-if="authStore.user?.avatar" :src="authStore.user.avatar" alt="User Avatar" />
             <span v-else class="user-icon">👤</span>
           </div>
           <div class="user-info">
