@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useProductStore } from '../stores/products';
 import { useAuthStore } from '../stores/auth';
+import AddProductDialog from '../components/products/AddProductDialog.vue';
 
 const productStore = useProductStore();
 const authStore = useAuthStore();
@@ -26,11 +27,6 @@ const showViewDialog = ref(false);
 const showEditDialog = ref(false);
 
 // Product data
-const newProduct = ref({
-  name: '',
-  description: ''
-});
-
 const selectedProduct = ref(null);
 const editingProduct = ref(null);
 const formError = ref('');
@@ -121,21 +117,15 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside);
 });
 
-// Reset create form
-const resetCreateForm = () => {
-  newProduct.value = {
-    name: '',
-    description: ''
-  };
-  formError.value = '';
-};
-
 // Toggle create dialog
 const toggleCreateDialog = () => {
   showCreateDialog.value = !showCreateDialog.value;
-  if (!showCreateDialog.value) {
-    resetCreateForm();
-  }
+};
+
+// Handle product added event
+const handleProductAdded = (product) => {
+  console.log('Product added:', product);
+  // The product is already added to the store by the component
 };
 
 // Open view dialog for a product
@@ -180,33 +170,6 @@ const submitEditedProduct = async () => {
     }
   } catch (err) {
     console.error('Error updating product:', err);
-  }
-};
-
-// Submit new product
-const submitNewProduct = async () => {
-  // Basic validation
-  if (!newProduct.value.name) {
-    formError.value = 'Name is required';
-    return;
-  }
-
-  try {
-    console.log('Submitting product:', newProduct.value);
-    console.log('Auth status before submit:', isAuthenticated.value);
-    console.log('Token before submit:', authStore.token?.substring(0, 10) + '...');
-    
-    const created = await productStore.createProduct(newProduct.value);
-    console.log('Response from createProduct:', created);
-    
-    if (created) {
-      toggleCreateDialog();
-    } else {
-      formError.value = productStore.error || 'Failed to create product';
-    }
-  } catch (err) {
-    console.error('Error creating product (detailed):', err);
-    formError.value = err.message || 'Error creating product';
   }
 };
 
@@ -304,34 +267,12 @@ const deleteProduct = async (id) => {
       </div>
     </div>
     
-    <!-- Create Product Dialog -->
-    <div v-if="showCreateDialog" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Add New Product</h2>
-          <button @click="toggleCreateDialog" class="close-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="formError" class="form-error">{{ formError }}</div>
-          
-          <div class="form-group">
-            <label for="name">Product Name *</label>
-            <input type="text" id="name" v-model="newProduct.name" placeholder="Product name">
-          </div>
-          
-          <div class="form-group">
-            <label for="description">Description</label>
-            <textarea id="description" v-model="newProduct.description" placeholder="Product description"></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button @click="toggleCreateDialog" class="btn secondary">Cancel</button>
-          <button @click="submitNewProduct" class="btn primary" :disabled="isCreating">
-            {{ isCreating ? 'Creating...' : 'Create Product' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Add Product Dialog Component -->
+    <AddProductDialog 
+      :show="showCreateDialog" 
+      @close="toggleCreateDialog"
+      @product-added="handleProductAdded"
+    />
     
     <!-- View Product Dialog -->
     <div v-if="showViewDialog" class="modal">
