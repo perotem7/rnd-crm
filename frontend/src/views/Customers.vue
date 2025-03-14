@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useCustomerStore } from '../stores/customers';
+import CustomerDialog from '../components/customers/CustomerDialog.vue';
 
 const customerStore = useCustomerStore();
 const { 
@@ -11,23 +12,12 @@ const {
 } = customerStore;
 
 // Modals state
-const showCreateDialog = ref(false);
+const showCustomerDialog = ref(false);
 const showViewDialog = ref(false);
-const showEditDialog = ref(false);
+const isEditMode = ref(false);
 
 // Customer data
-const newCustomer = ref({
-  name: '',
-  email: '',
-  phone: '',
-  company: '',
-  address: '',
-  notes: ''
-});
-
 const selectedCustomer = ref(null);
-const editingCustomer = ref(null);
-const formError = ref('');
 
 // Track expanded customer cards
 const expandedCards = ref({});
@@ -109,25 +99,11 @@ onBeforeUnmount(() => {
   // document.removeEventListener('click', handleClickOutside);
 });
 
-// Reset create form
-const resetCreateForm = () => {
-  newCustomer.value = {
-    name: '',
-    email: '',
-    phone: '',
-    company: '',
-    address: '',
-    notes: ''
-  };
-  formError.value = '';
-};
-
-// Toggle create dialog
-const toggleCreateDialog = () => {
-  showCreateDialog.value = !showCreateDialog.value;
-  if (!showCreateDialog.value) {
-    resetCreateForm();
-  }
+// Open add dialog
+const openAddDialog = () => {
+  selectedCustomer.value = null;
+  isEditMode.value = false;
+  showCustomerDialog.value = true;
 };
 
 // Open view dialog for a customer
@@ -143,41 +119,27 @@ const closeViewDialog = () => {
 };
 
 // Open edit dialog for a customer
-const editCustomer = (customer) => {
-  // Create a deep copy to avoid mutating the original
-  editingCustomer.value = JSON.parse(JSON.stringify(customer));
-  showEditDialog.value = true;
-  formError.value = '';
+const openEditDialog = (customer) => {
+  selectedCustomer.value = customer;
+  isEditMode.value = true;
+  showCustomerDialog.value = true;
 };
 
-// Close edit dialog
-const closeEditDialog = () => {
-  showEditDialog.value = false;
-  editingCustomer.value = null;
-  formError.value = '';
+// Close customer dialog
+const closeCustomerDialog = () => {
+  showCustomerDialog.value = false;
+  isEditMode.value = false;
+  selectedCustomer.value = null;
 };
 
-// Submit edited customer
-const submitEditedCustomer = async () => {
-  // Basic validation
-  if (!editingCustomer.value.name || !editingCustomer.value.email) {
-    formError.value = 'Name and email are required';
-    return;
-  }
-  
-  // Email validation
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(editingCustomer.value.email)) {
-    formError.value = 'Please enter a valid email address';
-    return;
-  }
-  
-  try {
-    await customerStore.updateCustomer(editingCustomer.value.id, editingCustomer.value);
-    closeEditDialog();
-  } catch (err) {
-    formError.value = err.message || 'Failed to update customer';
-  }
+// Handle customer added event
+const handleCustomerAdded = (customer) => {
+  // You could add additional logic here if needed
+};
+
+// Handle customer updated event
+const handleCustomerUpdated = (customer) => {
+  // You could add additional logic here if needed
 };
 
 // Delete customer
@@ -185,42 +147,17 @@ const deleteCustomer = async (id) => {
   if (confirm('Are you sure you want to delete this customer?')) {
     try {
       await customerStore.deleteCustomer(id);
-      closeEditDialog();
     } catch (err) {
-      formError.value = err.message || 'Failed to delete customer';
+      console.error('Failed to delete customer:', err);
     }
   }
 };
 
-// Close dialog on escape key
+// Handle keydown event
 const handleKeydown = (e) => {
   if (e.key === 'Escape') {
-    if (showCreateDialog.value) toggleCreateDialog();
+    if (showCustomerDialog.value) closeCustomerDialog();
     if (showViewDialog.value) closeViewDialog();
-    if (showEditDialog.value) closeEditDialog();
-  }
-};
-
-// Submit new customer
-const submitCustomer = async () => {
-  // Basic validation
-  if (!newCustomer.value.name || !newCustomer.value.email) {
-    formError.value = 'Name and email are required';
-    return;
-  }
-  
-  // Email validation
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(newCustomer.value.email)) {
-    formError.value = 'Please enter a valid email address';
-    return;
-  }
-  
-  try {
-    await customerStore.createCustomer(newCustomer.value);
-    toggleCreateDialog();
-  } catch (err) {
-    formError.value = err.message;
   }
 };
 </script>
@@ -229,7 +166,7 @@ const submitCustomer = async () => {
   <div class="customers">
     <div class="customers-header">
       <h1>Customers</h1>
-      <button @click="toggleCreateDialog" class="btn primary">
+      <button @click="openAddDialog" class="btn primary">
         Add Customer
       </button>
     </div>
@@ -277,7 +214,7 @@ const submitCustomer = async () => {
                 </button>
                 <div v-show="actionMenuVisible[customer.id]" class="action-menu">
                   <div class="action-menu-item" @click.stop="viewCustomer(customer)">View Details</div>
-                  <div class="action-menu-item" @click.stop="editCustomer(customer)">Edit</div>
+                  <div class="action-menu-item" @click.stop="openEditDialog(customer)">Edit</div>
                   <div class="action-menu-item danger" @click.stop="deleteCustomer(customer.id)">Delete</div>
                 </div>
               </div>
@@ -302,24 +239,12 @@ const submitCustomer = async () => {
                   </div>
                   
                   <div class="detail-item">
-                    <div class="detail-label">Phone number</div>
+                    <div class="detail-label">Phone</div>
                     <div class="detail-value">{{ customer.phone || 'N/A' }}</div>
                   </div>
                 </div>
                 
                 <div class="detail-column">
-                  <div class="detail-item">
-                    <div class="detail-label">Customer photo</div>
-                    <div class="detail-value">
-                      <div class="customer-avatar">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="50" height="50">
-                          <circle cx="50" cy="35" r="20" fill="#4361ee" />
-                          <circle cx="50" cy="95" r="40" fill="#4361ee" />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                  
                   <div class="detail-item">
                     <div class="detail-label">Company</div>
                     <div class="detail-value">{{ customer.company || 'N/A' }}</div>
@@ -331,17 +256,15 @@ const submitCustomer = async () => {
                   </div>
                   
                   <div class="detail-item">
-                    <div class="detail-label">Created</div>
-                    <div class="detail-value">{{ formatDate(customer.createdAt) }}</div>
+                    <div class="detail-label">Added on</div>
+                    <div class="detail-value">{{ customer.createdAt ? formatDate(customer.createdAt) : 'N/A' }}</div>
                   </div>
                 </div>
-                
-                <div class="detail-column">
-                  <div class="detail-item full-width">
-                    <div class="detail-label">Bio</div>
-                    <div class="detail-value">{{ customer.notes || 'N/A' }}</div>
-                  </div>
-                </div>
+              </div>
+              
+              <div class="detail-item notes">
+                <div class="detail-label">Notes</div>
+                <div class="detail-value">{{ customer.notes || 'No notes' }}</div>
               </div>
             </div>
           </div>
@@ -349,105 +272,16 @@ const submitCustomer = async () => {
       </div>
     </div>
     
-    <!-- CREATE Customer Dialog Modal -->
-    <div v-if="showCreateDialog" class="modal-overlay" @click="toggleCreateDialog" @keydown="handleKeydown">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h2>Add New Customer</h2>
-          <button class="close-button" @click="toggleCreateDialog">&times;</button>
-        </div>
-        
-        <div class="modal-body">
-          <form @submit.prevent="submitCustomer">
-            <div v-if="formError" class="form-error">{{ formError }}</div>
-            
-            <div class="form-row">
-              <div class="form-group">
-                <label for="name">Name *</label>
-                <input 
-                  id="name" 
-                  v-model="newCustomer.name" 
-                  type="text" 
-                  placeholder="Full Name"
-                  required
-                />
-              </div>
-              
-              <div class="form-group">
-                <label for="email">Email *</label>
-                <input 
-                  id="email" 
-                  v-model="newCustomer.email" 
-                  type="email" 
-                  placeholder="email@example.com"
-                  required
-                />
-              </div>
-            </div>
-            
-            <div class="form-row">
-              <div class="form-group">
-                <label for="phone">Phone</label>
-                <input 
-                  id="phone" 
-                  v-model="newCustomer.phone" 
-                  type="tel" 
-                  placeholder="Phone Number"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label for="company">Company</label>
-                <input 
-                  id="company" 
-                  v-model="newCustomer.company" 
-                  type="text" 
-                  placeholder="Company Name"
-                />
-              </div>
-            </div>
-            
-            <div class="form-group">
-              <label for="address">Address</label>
-              <input 
-                id="address" 
-                v-model="newCustomer.address" 
-                type="text" 
-                placeholder="Full Address"
-              />
-            </div>
-            
-            <div class="form-group">
-              <label for="notes">Notes</label>
-              <textarea 
-                id="notes" 
-                v-model="newCustomer.notes" 
-                placeholder="Additional notes..."
-                rows="3"
-              ></textarea>
-            </div>
-            
-            <div class="form-actions">
-              <button type="button" @click="toggleCreateDialog" class="btn secondary">Cancel</button>
-              <button type="submit" class="btn primary" :disabled="isCreating">
-                {{ isCreating ? 'Creating...' : 'Create Customer' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-    
-    <!-- VIEW Customer Dialog Modal -->
-    <div v-if="showViewDialog" class="modal-overlay" @click="closeViewDialog" @keydown="handleKeydown">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
+    <!-- Detail View Dialog -->
+    <div v-if="showViewDialog" class="dialog-overlay" @click="closeViewDialog">
+      <div class="dialog-content" @click.stop>
+        <div class="dialog-header">
           <h2>Customer Details</h2>
           <button class="close-button" @click="closeViewDialog">&times;</button>
         </div>
         
-        <div class="modal-body" v-if="selectedCustomer">
-          <div class="customer-detail">
+        <div v-if="selectedCustomer" class="dialog-body">
+          <div class="detail-view">
             <div class="detail-row">
               <div class="detail-label">Name:</div>
               <div class="detail-value">{{ selectedCustomer.name }}</div>
@@ -474,123 +308,32 @@ const submitCustomer = async () => {
             </div>
             
             <div class="detail-row">
+              <div class="detail-label">Added on:</div>
+              <div class="detail-value">{{ selectedCustomer.createdAt ? formatDate(selectedCustomer.createdAt) : 'N/A' }}</div>
+            </div>
+            
+            <div class="detail-row notes">
               <div class="detail-label">Notes:</div>
-              <div class="detail-value detail-notes">{{ selectedCustomer.notes || 'No notes' }}</div>
-            </div>
-            
-            <div class="detail-row">
-              <div class="detail-label">Created:</div>
-              <div class="detail-value">{{ formatDate(selectedCustomer.createdAt) }}</div>
-            </div>
-            
-            <div class="detail-row">
-              <div class="detail-label">Last Updated:</div>
-              <div class="detail-value">{{ formatDate(selectedCustomer.updatedAt) }}</div>
+              <div class="detail-value">{{ selectedCustomer.notes || 'No notes' }}</div>
             </div>
           </div>
           
-          <div class="form-actions">
-            <button type="button" @click="closeViewDialog" class="btn secondary">Close</button>
-            <button type="button" @click="editCustomer(selectedCustomer); closeViewDialog();" class="btn primary">
-              Edit Customer
-            </button>
+          <div class="dialog-actions">
+            <button class="btn primary" @click="openEditDialog(selectedCustomer)">Edit Customer</button>
           </div>
         </div>
       </div>
     </div>
     
-    <!-- EDIT Customer Dialog Modal -->
-    <div v-if="showEditDialog" class="modal-overlay" @click="closeEditDialog" @keydown="handleKeydown">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h2>Edit Customer</h2>
-          <button class="close-button" @click="closeEditDialog">&times;</button>
-        </div>
-        
-        <div class="modal-body" v-if="editingCustomer">
-          <form @submit.prevent="submitEditedCustomer">
-            <div v-if="formError" class="form-error">{{ formError }}</div>
-            
-            <div class="form-row">
-              <div class="form-group">
-                <label for="edit-name">Name *</label>
-                <input 
-                  id="edit-name" 
-                  v-model="editingCustomer.name" 
-                  type="text" 
-                  placeholder="Full Name"
-                  required
-                />
-              </div>
-              
-              <div class="form-group">
-                <label for="edit-email">Email *</label>
-                <input 
-                  id="edit-email" 
-                  v-model="editingCustomer.email" 
-                  type="email" 
-                  placeholder="email@example.com"
-                  required
-                />
-              </div>
-            </div>
-            
-            <div class="form-row">
-              <div class="form-group">
-                <label for="edit-phone">Phone</label>
-                <input 
-                  id="edit-phone" 
-                  v-model="editingCustomer.phone" 
-                  type="tel" 
-                  placeholder="Phone Number"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label for="edit-company">Company</label>
-                <input 
-                  id="edit-company" 
-                  v-model="editingCustomer.company" 
-                  type="text" 
-                  placeholder="Company Name"
-                />
-              </div>
-            </div>
-            
-            <div class="form-group">
-              <label for="edit-address">Address</label>
-              <input 
-                id="edit-address" 
-                v-model="editingCustomer.address" 
-                type="text" 
-                placeholder="Full Address"
-              />
-            </div>
-            
-            <div class="form-group">
-              <label for="edit-notes">Notes</label>
-              <textarea 
-                id="edit-notes" 
-                v-model="editingCustomer.notes" 
-                placeholder="Additional notes..."
-                rows="3"
-              ></textarea>
-            </div>
-            
-            <div class="form-actions">
-              <button type="button" @click="deleteCustomer(editingCustomer.id)" class="btn danger">
-                Delete
-              </button>
-              <div class="spacer"></div>
-              <button type="button" @click="closeEditDialog" class="btn secondary">Cancel</button>
-              <button type="submit" class="btn primary" :disabled="loading">
-                {{ loading ? 'Saving...' : 'Save Changes' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+    <!-- Customer Dialog (Add/Edit) -->
+    <CustomerDialog
+      :show="showCustomerDialog"
+      :customer="selectedCustomer"
+      :is-edit-mode="isEditMode"
+      @close="closeCustomerDialog"
+      @customer-added="handleCustomerAdded"
+      @customer-updated="handleCustomerUpdated"
+    />
   </div>
 </template>
 
@@ -906,7 +649,7 @@ const submitCustomer = async () => {
 }
 
 /* Modal Styles */
-.modal-overlay {
+.dialog-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -919,7 +662,7 @@ const submitCustomer = async () => {
   z-index: 1000;
 }
 
-.modal-content {
+.dialog-content {
   background-color: white;
   border-radius: 8px;
   width: 90%;
@@ -929,7 +672,7 @@ const submitCustomer = async () => {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
-.modal-header {
+.dialog-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -937,7 +680,7 @@ const submitCustomer = async () => {
   border-bottom: 1px solid #e9ecef;
 }
 
-.modal-header h2 {
+.dialog-header h2 {
   margin: 0;
   font-size: 1.5rem;
 }
@@ -954,7 +697,7 @@ const submitCustomer = async () => {
   color: #343a40;
 }
 
-.modal-body {
+.dialog-body {
   padding: 20px;
 }
 
